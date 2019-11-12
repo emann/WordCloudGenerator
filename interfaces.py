@@ -1,6 +1,4 @@
-import sys
-import inspect
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple, Tuple
 from datetime import datetime
 
 import praw
@@ -8,7 +6,8 @@ import praw
 
 class WordListRequestConfig(NamedTuple):
     platform: str  # reddit vs. Twitter
-    source: str  # user, hashtag, subreddit, etc.
+    source_type: str  # user, hashtag, subreddit, etc.
+    source_value: str  # the actual source e.g. 'r/python'
     num_posts: int
     time: Tuple[datetime, datetime]  # time[0] = min time, time[1] max time
     sort: str
@@ -50,10 +49,10 @@ class DataInterface:
         -Functions that retrieve from sources should be named "from_source", where source is a string representation of
             what the source is called, and is also a member of the class' valid_sources list."""
 
-
-    def __init__(self, platform, valid_sources, api_class, api_keys):
+    def __init__(self, api_class, api_keys, platform, valid_source_types, valid_sort_types):
         self.platform = platform
-        self.valid_sources = valid_sources
+        self.valid_source_types = valid_source_types
+        self.valid_sort_types = valid_sort_types
         self.api_class = api_class
         self.api_keys = api_keys
         self.api = self.init_api_client()
@@ -65,24 +64,32 @@ class DataInterface:
         return self.api_class(**self.api_keys)
 
     def get_word_list(self, request_config: WordListRequestConfig):
-        if request_config.platform != self.platform or request_config.source not in self.valid_sources:
+        if request_config.platform != self.platform or request_config.source_type not in self.valid_source_types:
             return None
-        fetch_function = getattr(self, f'from_{request_config.source}')
+        fetch_function = getattr(self, f'from_{request_config.source_type}')
         return fetch_function(request_config)
 
 
 class RedditInterface(DataInterface):
     def __init__(self, api_keys):
-        valid_sources = ['subreddit', 'user', 'post']
-        super().__init__('reddit', valid_sources, praw.Reddit, api_keys)
+        valid_source_types = ['subreddit', 'user', 'post']
+        valid_sort_types = ['top', 'new', 'controversial']
+        super().__init__('reddit', praw.Reddit, api_keys, valid_source_types, valid_sort_types)
 
-    def from_subreddit(self, request_config):
+    def from_subreddit(self, request_config: WordListRequestConfig):
+        subreddit = self.api.subreddit(request_config.source_value)
+        submissions_getter = getattr(subreddit, request_config.sort)
+        submissions = submissions_getter(limit=request_config.num_posts)
+        words = []
+        for s in submissions:
+            words.extend(s.title.split())
+        print(words)
+        return words
+
+    def from_user(self, request_config: WordListRequestConfig):
         pass
 
-    def from_user(self, request_config):
-        pass
-
-    def from_post(self, request_config):
+    def from_post(self, request_config: WordListRequestConfig):
         pass
 
 
@@ -90,6 +97,4 @@ if __name__ == '__main__':
     from config import API_KEYS
     r = RedditInterface(API_KEYS['reddit'])
     print(r)
-    r.get_word_list(WordListRequestConfig('reddit', 'subreddit', None, 100, 'popularity'))
-    print(locals())
-    print('RedditInterface' in locals())
+    r.get_word_list(WordListRequestConfig('reddit', 'subreddit', 'python', 1000, 'popularity', 'new'))
