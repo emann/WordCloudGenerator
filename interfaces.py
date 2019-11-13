@@ -2,15 +2,17 @@ from typing import NamedTuple, Tuple
 from datetime import datetime
 
 import praw
+from praw.models import MoreComments, comment_forest
 
 
 class WordListRequestConfig(NamedTuple):
     platform: str  # reddit vs. Twitter
     source_type: str  # user, hashtag, subreddit, etc.
     source_value: str  # the actual source e.g. 'r/python'
-    num_posts: int
+    max_posts: int
     time: Tuple[datetime, datetime]  # time[0] = min time, time[1] max time
     sort: str
+    extra_args: dict = {}  # A dictionary of extra arguments/values
 
 
 class DataInterfaceManager:
@@ -74,27 +76,40 @@ class RedditInterface(DataInterface):
     def __init__(self, api_keys):
         valid_source_types = ['subreddit', 'user', 'post']
         valid_sort_types = ['top', 'new', 'controversial']
-        super().__init__('reddit', praw.Reddit, api_keys, valid_source_types, valid_sort_types)
+        super().__init__(praw.Reddit, api_keys, 'reddit', valid_source_types, valid_sort_types)
 
-    def from_subreddit(self, request_config: WordListRequestConfig):
+    def from_subreddit(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
         subreddit = self.api.subreddit(request_config.source_value)
         submissions_getter = getattr(subreddit, request_config.sort)
-        submissions = submissions_getter(limit=request_config.num_posts)
+        submissions = submissions_getter(limit=request_config.max_posts)
         words = []
         for s in submissions:
             words.extend(s.title.split())
-        print(words)
         return words
 
     def from_user(self, request_config: WordListRequestConfig):
         pass
 
-    def from_post(self, request_config: WordListRequestConfig):
-        pass
+    def from_post(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
+        submission = self.api.submission(request_config.source_value)
+        submission.comment_sort = request_config.sort
+        submission.comment_limit = request_config.max_posts
+        comments = submission.comments
+        if not request_config.extra_args.get('top_level_only', False):  # If we're looking at all child comments too
+            comments.replace_more(limit=None)
+            comments = comments.list()
+        else:
+            comments.replace_more(limit=0)
+        words = []
+        for c in comments:
+            words.extend(c.body.split())
+        return words
+
+
 
 
 if __name__ == '__main__':
     from config import API_KEYS
-    r = RedditInterface(API_KEYS['reddit'])
-    print(r)
-    r.get_word_list(WordListRequestConfig('reddit', 'subreddit', 'python', 1000, 'popularity', 'new'))
+    reddit = RedditInterface(API_KEYS['reddit'])
+    print(reddit)
+    print(reddit.get_word_list(WordListRequestConfig('reddit', 'post', 'duuvla', None, None, 'popularity')))
