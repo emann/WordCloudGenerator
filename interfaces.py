@@ -2,7 +2,7 @@ from typing import NamedTuple, Tuple
 from datetime import datetime
 
 import praw
-from praw.models import MoreComments, comment_forest
+import tweepy
 
 
 class WordListRequestConfig(NamedTuple):
@@ -111,10 +111,35 @@ class RedditInterface(DataInterface):
         return words
 
 
+class TwitterInterface(DataInterface):
+    def __init__(self, api_keys):
+        valid_sources = []
+        valid_sort_types = []
+        super().__init__(tweepy.API, api_keys, 'twitter', valid_sources, valid_sort_types)
+
+    def init_api_client(self):
+        auth = tweepy.AppAuthHandler(**self.api_keys)
+        return tweepy.API(auth)
+
+    def from_user(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering, sorting
+        user_tweets = self.api.user_timeline(screen_name=request_config.source_value, count=request_config.max_posts)
+        words = []
+        for tweet in user_tweets:
+            words.extend(tweet.text.split())
+        return words
+
+    def from_hashtag(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering, sorting
+        tweets = tweepy.Cursor(self.api.search,
+                               q=f'#{request_config.source_value}',
+                               lang='en').items(request_config.max_posts)
+
+
+
 
 
 if __name__ == '__main__':
     from config import API_KEYS
     reddit = RedditInterface(API_KEYS['reddit'])
-    print(reddit)
-    print(reddit.get_word_list(WordListRequestConfig('reddit', 'post', 'duuvla', None, None, 'popularity')))
+    twitter = TwitterInterface(API_KEYS['twitter'])
+    print(twitter.from_hashtag(WordListRequestConfig('twitter', 'hashtag', 'wwe', 3, None, None, None)))
+    print(twitter)
