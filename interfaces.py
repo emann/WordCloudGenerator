@@ -67,7 +67,7 @@ class DataInterface:
 
     def get_word_list(self, request_config: WordListRequestConfig):
         if request_config.platform != self.platform or request_config.source_type not in self.valid_source_types:
-            return None
+            return None  # ToDo: come up with a better way to represent errors like this
         fetch_function = getattr(self, f'from_{request_config.source_type}')
         return fetch_function(request_config)
 
@@ -87,8 +87,13 @@ class RedditInterface(DataInterface):
             words.extend(s.title.split())
         return words
 
-    def from_user(self, request_config: WordListRequestConfig):
-        pass
+    def from_user(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
+        user = self.api.redditor(request_config.source_value)
+        sorted_comments = getattr(user.comments, request_config.sort)
+        words = []
+        for c in sorted_comments(limit=request_config.max_posts):
+            words.extend(c.body.split())
+        return words
 
     def from_post(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
         submission = self.api.submission(request_config.source_value)
