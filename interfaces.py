@@ -5,7 +5,7 @@ import praw
 import tweepy
 
 
-class WordStringRequestConfig(NamedTuple):
+class WordListRequestConfig(NamedTuple):
     platform: str  # reddit vs. Twitter
     source_type: str  # user, hashtag, subreddit, etc.
     source_value: str  # the actual source e.g. 'r/python'
@@ -39,11 +39,10 @@ class DataInterfaceManager:
             interface_class = globals()[expected_class_name]
             self.interfaces[platform] = interface_class(api_keys)
 
-    def request_word_string(self, request_config: WordStringRequestConfig):
+    def request_word_list(self, request_config: WordListRequestConfig):
         if request_config.platform not in self.platforms:
             return None  # Maybe this should raise an error? e.g. APINotImplenetedError
-        appropriate_interface = self.interfaces[request_config.platform]
-        return appropriate_interface.get_word_string(request_config)
+        return self.interfaces[request_config.platform].get_word_list(request_config)
 
 
 class DataInterface:
@@ -68,7 +67,7 @@ class DataInterface:
     def init_api_client(self):
         return self.api_class(**self.api_keys)
 
-    def get_word_string(self, request_config: WordStringRequestConfig):
+    def get_word_list(self, request_config: WordListRequestConfig):
         if request_config.platform != self.platform or request_config.source_type not in self.valid_source_types:
             return None  # ToDo: come up with a better way to represent errors like this
         fetch_function = getattr(self, f'from_{request_config.source_type}')
@@ -81,24 +80,24 @@ class RedditInterface(DataInterface):
         valid_sort_types = ['top', 'new', 'controversial']
         super().__init__(praw.Reddit, api_keys, 'reddit', valid_source_types, valid_sort_types)
 
-    def from_subreddit(self, request_config: WordStringRequestConfig):  # ToDo: Add time filtering
+    def from_subreddit(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
         subreddit = self.api.subreddit(request_config.source_value)
         submissions_getter = getattr(subreddit, request_config.sort)
         submissions = submissions_getter(limit=request_config.max_posts)
-        word_string = ''
+        words = []
         for s in submissions:
-            word_string += s.title
-        return word_string
+            words.extend(s.title.split())
+        return words
 
-    def from_user(self, request_config: WordStringRequestConfig):  # ToDo: Add time filtering
+    def from_user(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
         user = self.api.redditor(request_config.source_value)
         sorted_comments = getattr(user.comments, request_config.sort)
-        word_string = ''
+        words = []
         for c in sorted_comments(limit=request_config.max_posts):
-            word_string += c.body
-        return word_string
+            words.extend(c.body.split())
+        return words
 
-    def from_post(self, request_config: WordStringRequestConfig):  # ToDo: Add time filtering
+    def from_post(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
         submission = self.api.submission(request_config.source_value)
         submission.comment_sort = request_config.sort
         submission.comment_limit = request_config.max_posts
@@ -108,15 +107,15 @@ class RedditInterface(DataInterface):
             comments = comments.list()
         else:
             comments.replace_more(limit=0)
-        word_string = ''
+        words = []
         for c in comments:
-            word_string += c.body
-        return word_string
+            words.extend(c.body.split())
+        return words
 
 
 class TwitterInterface(DataInterface):
     def __init__(self, api_keys):
-        valid_sources = ['user', 'hashtag']
+        valid_sources = ['user','hashtag']
         valid_sort_types = []
         super().__init__(tweepy.API, api_keys, 'twitter', valid_sources, valid_sort_types)
 
@@ -124,21 +123,22 @@ class TwitterInterface(DataInterface):
         auth = tweepy.AppAuthHandler(**self.api_keys)
         return tweepy.API(auth)
 
-    def from_user(self, request_config: WordStringRequestConfig):  # ToDo: Add time filtering, sorting
+    def from_user(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering, sorting
         user_tweets = self.api.user_timeline(screen_name=request_config.source_value, count=request_config.max_posts)
-        word_string = ''
+        words = []
         for tweet in user_tweets:
-            word_string += tweet.text
-        return word_string
+            words.extend(tweet.text.split())
+        return words
 
-    def from_hashtag(self, request_config: WordStringRequestConfig):  # ToDo: Add time filtering, sorting
+    def from_hashtag(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering, sorting
         tweets = tweepy.Cursor(self.api.search,
                                q=f'#{request_config.source_value}',
                                lang='en').items(request_config.max_posts)
-        word_string = ''
+        words = []
         for tweet in tweets:
-            word_string += tweet.text
-        return word_string
+            words.extend(tweet.text.split())
+        return words
+
 
 
 
@@ -148,4 +148,4 @@ if __name__ == '__main__':
     dim = DataInterfaceManager(API_KEYS)
     reddit = dim['reddit']
     twitter = dim['twitter']
-    print(dim.request_word_string(WordStringRequestConfig('twitter', 'user', 'wwe', 1000, None, None, None)))
+    print(dim.request_word_list(WordListRequestConfig('twitter', 'hashtag', 'impeachmentinquiry', 100, None, None, None)))
