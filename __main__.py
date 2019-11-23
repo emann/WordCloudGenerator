@@ -7,12 +7,12 @@ from interfaces import WordListRequestConfig, DataInterfaceManager
 from config import API_KEYS
 
 dim = DataInterfaceManager(API_KEYS)
-STOPWORDS.add('RT')
+STOPWORDS |= {'RT'}
 
 
 if __name__ == '__main__':
-    word_list = dim.request_word_list(WordListRequestConfig('twitter', 'hashtag', 'impeachmentinquiry', 100, None, 'top', None))
-    word_list = filter(lambda x: not re.search(r'^https', x), word_list)
+    word_list = dim.request_word_list(WordListRequestConfig('twitter', 'hashtag', 'impeachmentinquiry', 1000, None, 'top', None))
+    word_list = filter(lambda x: not re.search(r'^https|^@|^#', x), word_list)
     word_string = ' '.join(word_list)
     wordcloud = WordCloud(width=800, height=800,
                           background_color='white',

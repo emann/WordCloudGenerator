@@ -47,7 +47,7 @@ class DataInterfaceManager:
 
 class DataInterface:
     """Super class for all data interfaces. Initializes api client and handles getting word lists from valid sources.
-    All child classes should be adhere to the following naming convention:
+    All child classes should adhere to the following naming convention:
         -The name of the class should be "PlatformInterface", where Platform is the name of the platform
             with a capitalized first letter.
         -Functions that retrieve from sources should be named "from_source", where source is a string representation of
@@ -69,7 +69,8 @@ class DataInterface:
 
     def get_word_list(self, request_config: WordListRequestConfig):
         if request_config.platform != self.platform or request_config.source_type not in self.valid_source_types:
-            return None  # ToDo: come up with a better way to represent errors like this
+            raise Exception(f'Invalid request config; tried {request_config.platform, request_config.source_value}'
+                            f'on {self.platform} which only accepts {self.valid_source_types}')
         fetch_function = getattr(self, f'from_{request_config.source_type}')
         return fetch_function(request_config)
 
@@ -80,7 +81,7 @@ class RedditInterface(DataInterface):
         valid_sort_types = ['top', 'new', 'controversial']
         super().__init__(praw.Reddit, api_keys, 'reddit', valid_source_types, valid_sort_types)
 
-    def from_subreddit(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
+    def from_subreddit(self, request_config: WordListRequestConfig):
         subreddit = self.api.subreddit(request_config.source_value)
         submissions_getter = getattr(subreddit, request_config.sort)
         submissions = submissions_getter(limit=request_config.max_posts)
@@ -89,7 +90,7 @@ class RedditInterface(DataInterface):
             words.extend(s.title.split())
         return words
 
-    def from_user(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
+    def from_user(self, request_config: WordListRequestConfig):
         user = self.api.redditor(request_config.source_value)
         sorted_comments = getattr(user.comments, request_config.sort)
         words = []
@@ -97,7 +98,7 @@ class RedditInterface(DataInterface):
             words.extend(c.body.split())
         return words
 
-    def from_post(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering
+    def from_post(self, request_config: WordListRequestConfig):
         submission = self.api.submission(request_config.source_value)
         submission.comment_sort = request_config.sort
         submission.comment_limit = request_config.max_posts
@@ -123,14 +124,14 @@ class TwitterInterface(DataInterface):
         auth = tweepy.AppAuthHandler(**self.api_keys)
         return tweepy.API(auth)
 
-    def from_user(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering, sorting
+    def from_user(self, request_config: WordListRequestConfig):
         user_tweets = self.api.user_timeline(screen_name=request_config.source_value, count=request_config.max_posts)
         words = []
         for tweet in user_tweets:
             words.extend(tweet.text.split())
         return words
 
-    def from_hashtag(self, request_config: WordListRequestConfig):  # ToDo: Add time filtering, sorting
+    def from_hashtag(self, request_config: WordListRequestConfig):
         tweets = tweepy.Cursor(self.api.search,
                                q=f'#{request_config.source_value}',
                                lang='en').items(request_config.max_posts)
